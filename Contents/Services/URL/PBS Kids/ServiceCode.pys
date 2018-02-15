@@ -1,0 +1,64 @@
+JSON_URL = 'http://pbskids.org/pbsk/video/api/getVideos/?guid='
+
+####################################################################################################
+def MetadataObjectForURL(url):
+
+    details = GetJSON(url)
+
+    title = details['title']
+    summary = details['description']
+
+    try: duration = details['videos']['iphone']['length']
+    except: duration = None
+
+    thumb = ''
+    images = ['kids-mezzannine-16x9', 'originalres_16x9', 'kids-mezzannine-4x3', 'originalres_4x3']
+
+    for img in images:
+        if img in details['images'] and 'url' in details['images'][img] and details['images'][img]['url']:
+            thumb = details['images'][img]['url']
+            break
+
+    if details['type'] =='Clip':
+        return VideoClipObject(
+            title = title,
+            summary = summary,
+            thumb = Resource.ContentsOfURLWithFallback(thumb)
+        )
+    else:
+        show_title = details['series_title']
+        return EpisodeObject(
+            title = title,
+            show = show_title,
+            summary = summary,
+            thumb = Resource.ContentsOfURLWithFallback(thumb)
+        )
+
+####################################################################################################
+def MediaObjectsForURL(url):
+
+    return [
+        MediaObject(
+            video_codec = VideoCodec.H264,
+            audio_codec = AudioCodec.AAC,
+            protocol = 'hls',
+            parts = [PartObject(key=Callback(PlayVideo, url=url))],
+        )
+    ]
+
+####################################################################################################
+@indirect
+def PlayVideo(url):
+
+    details = GetJSON(url)
+    try:    redirect_url = details['videos']['ipad']['url']
+    except: redirect_url = details['videos']['iphone']['url']
+    m3u8_url = JSON.ObjectFromURL(redirect_url + '?format=json')['url']
+    return IndirectResponse(VideoClipObject, key=HTTPLiveStreamURL(url=m3u8_url))
+    
+####################################################################################################
+def GetJSON(url):
+
+    video_id = url.split('guid=')[1]
+    json = JSON.ObjectFromURL(JSON_URL + video_id)
+    return json['items'][0]
